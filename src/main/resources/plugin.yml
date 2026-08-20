@@ -1,0 +1,25 @@
+# Copyright (c) 2026 AeroX Dev
+# Code by Ayle (@alyfinnn)
+# MIT License
+#
+# Bukkit/Spigot/Paper plugin descriptor.
+
+name: "UsageMonitor"
+version: "1.2.3"
+main: com.usagemonitor.UsageMonitorPlugin
+api-version: "1.16"
+author: "UsageMonitorTeam"
+description: "Real-time Minecraft server monitor that maintains a single live Discord webhook message — edited in place every refresh."
+website: "https://github.com/ayliee/Usage-Monitor"
+
+commands:
+  usagemonitor:
+    description: "Manage and inspect the Usage Monitor plugin"
+    permission: usagemonitor.admin
+    aliases: [umon, um]
+    usage: "/usagemonitor [reload|status|forceupdate|reset|help]"
+
+permissions:
+  usagemonitor.admin:
+    description: "Allows reloading and configuring the Usage Monitor plugin"
+    default: op
