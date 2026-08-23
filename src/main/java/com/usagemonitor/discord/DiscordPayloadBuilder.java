@@ -12,14 +12,8 @@ import com.usagemonitor.metrics.NetworkAndPlayerMetrics;
 import com.usagemonitor.metrics.ServerMetricsCollector;
 import com.usagemonitor.metrics.WorldMetrics;
 
-/**
- * Builds a single Discord embed. All emojis default to empty strings — the
- * embed ships with no emoji decoration. To bring emojis back, set them under
- * `monitor.emojis.*` in config.yml.
- *
- * When an emoji is empty, the builder skips the leading space so plain text
- * flows without awkward double spaces or dangling punctuation.
- */
+// Builds the live dashboard embed. Emojis default to empty so the embed is
+// text-only; setting any monitor.emojis.* key brings them back.
 public class DiscordPayloadBuilder {
 
     private final PluginConfig config;
@@ -30,7 +24,6 @@ public class DiscordPayloadBuilder {
         this.serverName = serverName == null || serverName.isEmpty() ? "Minecraft Server" : serverName;
     }
 
-    /** Returns "emoji + space" if the emoji is set, or "" if it's empty. */
     private String es(String key) {
         String e = config.emoji(key);
         return e.isEmpty() ? "" : e + " ";
@@ -42,11 +35,8 @@ public class DiscordPayloadBuilder {
 
         EmbedBuilder embed = new EmbedBuilder();
         embed.setColor(color);
-
-        // Title: <emoji> <serverName> • Live Usage (emoji is empty by default)
         embed.setTitle(es("title") + escape(serverName) + " • Live Usage");
 
-        // Description: status line
         StringBuilder desc = new StringBuilder();
         if (snapshot.isOnline()) {
             desc.append("**Status:** ").append(es("status-online")).append("ONLINE  •  Uptime `")
@@ -57,7 +47,6 @@ public class DiscordPayloadBuilder {
         }
         embed.setDescription(desc.toString());
 
-        // ---- Resources ----
         if (config.isShowResources()) {
             StringBuilder val = new StringBuilder();
             val.append("> **").append(es("ram")).append("RAM:** `")
@@ -71,7 +60,6 @@ public class DiscordPayloadBuilder {
             embed.addField(es("resources") + "Resources", val.toString(), true);
         }
 
-        // ---- Configuration ----
         if (config.isShowConfiguration()) {
             double[] tps = snapshot.getTps();
             String tpsEmoji = tps[0] >= 19.0 ? es("status-online") : (tps[0] >= 15.0 ? "" : es("status-offline"));
@@ -87,7 +75,6 @@ public class DiscordPayloadBuilder {
             embed.addField(es("configuration") + "Configuration", val.toString(), true);
         }
 
-        // ---- Live Stats ----
         if (config.isShowLiveStats()) {
             StringBuilder val = new StringBuilder();
             double procCpu = snapshot.getCpu().getProcessCpuLoad();
@@ -111,7 +98,6 @@ public class DiscordPayloadBuilder {
             embed.addField(es("live-stats") + "Live Stats", val.toString(), false);
         }
 
-        // ---- Players ----
         if (config.isShowActions()) {
             NetworkAndPlayerMetrics net = snapshot.getNetwork();
             StringBuilder val = new StringBuilder();
@@ -120,7 +106,6 @@ public class DiscordPayloadBuilder {
             embed.addField(es("players") + "Players", val.toString(), false);
         }
 
-        // ---- Worlds ----
         if (config.isShowWorldDetailsSafe()) {
             WorldMetrics wm = snapshot.getWorlds();
             StringBuilder val = new StringBuilder();
@@ -144,8 +129,6 @@ public class DiscordPayloadBuilder {
                 .add("embeds", java.util.List.of(embed.toJsonObject()))
                 .build();
     }
-
-    // ---- helpers ----
 
     private static String miniBar(double percent, int width) {
         if (width < 1) width = 1;

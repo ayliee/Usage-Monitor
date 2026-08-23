@@ -1,20 +1,11 @@
-# ============================================================================== #
-#                                                                               #
-# Copyright (c) 2026 AeroX Dev                                                  #
-# Code by Ayle (@alyfinnn)                                                      #
-# MIT License                                                                   #
-#                                                                               #
-# USAGE MONITOR — WEBHOOK CONFIGURATION                                         #
-# ============================================================================== #
+# Copyright (c) 2026 AeroX Dev
+# Code by Ayle (@alyfinnn)
+# MIT License
 #
-# Authentication: a single Discord webhook URL. No bot token, no client ID,
-# no guild ID, no channel ID required.
-#
-# To get a webhook URL:
-#   1. Open the Discord channel where you want the dashboard.
-#   2. Channel Settings (gear icon) → Integrations → Webhooks → New Webhook
-#   3. Copy the "Webhook URL" — paste it below.
-# ============================================================================== #
+# Usage Monitor — webhook configuration.
+# Auth is a single Discord webhook URL. No bot token, no client ID,
+# no guild ID, no channel ID. To get one: channel settings → Integrations
+# → Webhooks → New Webhook → Copy URL.
 
 discord:
   # Your Discord webhook URL.
@@ -22,7 +13,7 @@ discord:
   webhook-url: "YOUR_DISCORD_WEBHOOK_URL_HERE"
 
   # Auto-filled by the plugin after the first successful post.
-  # DO NOT EDIT manually — use `/usagemonitor reset` in-game to post a fresh message.
+  # Use `/usagemonitor reset` in-game to clear it and post a fresh message.
   message-id: ""
 
 monitor:
@@ -31,10 +22,10 @@ monitor:
   refresh-interval-seconds: 5
 
   # Accent color of the embed sidebar (hex code). Default is a dark grey
-  # (#2B2D31) that blends with Discord's dark theme.
+  # that blends with Discord's dark theme.
   embed-color: "#2B2D31"
 
-  # Length of the progress bars in the Live Stats section.
+  # Length of progress bars in the Live Stats section.
   progress-bar-length: 12
 
   # Toggle each section independently.
@@ -44,28 +35,10 @@ monitor:
   show-actions: true          # Players (count only, no name list)
   show-world-details: true    # World chunks / entities
 
-  # --------------------------------------------------------------------------- #
-  #  EMOJIS (optional)                                                          #
-  #                                                                             #
-  #  The embed ships with NO emojis. To add emojis back, set the keys you want  #
-  #  under `monitor.emojis.*`. Anything you don't set stays empty.              #
-  #                                                                             #
-  #  Two formats are supported:                                                 #
-  #    - Unicode:    "📦"                                                       #
-  #    - Custom:     "<:name:id>"   (static)                                    #
-  #                  "<a:name:id>"  (animated)                                   #
-  #                                                                             #
-  #  To get a custom emoji's <\:name:id> form: in Discord chat, type           #
-  #  \:emoji_name: (with the leading backslash) and Discord will autocomplete.  #
-  #                                                                             #
-  #  The 22 available keys are:                                                #
-  #    title, resources, configuration, live-stats, players, worlds,             #
-  #    status-online, status-offline, cpu, memory, disk, ram, storage,           #
-  #    jvm-heap, software, bukkit, tps, mspt,                                   #
-  #    players-online, chunks, entities                                        #
-  # --------------------------------------------------------------------------- #
-  emojis:
-    # Leave this section empty to keep the embed fully text-only. Example:
-    # resources: "📦"
-    # live-stats: "<:mystats:1234567890123456789>"
-    # players:   "<a:animated:9876543210987654321>"
+  # Emoji overrides. Ship empty so the embed has no decoration. To add
+  # emojis back, set any key. Both unicode and Discord custom emoji are
+  # supported ("<:name:id>" for static, "<a:name:id>" for animated).
+  # Available keys: title, resources, configuration, live-stats, players,
+  # worlds, status-online, status-offline, cpu, memory, disk, ram, storage,
+  # jvm-heap, software, bukkit, tps, mspt, players-online, chunks, entities.
+  emojis: {}

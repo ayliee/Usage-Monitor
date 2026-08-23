@@ -10,13 +10,15 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
 
-/**
- * Aggregates all server hardware, system, and game performance metrics into a unified snapshot.
- */
 public class ServerMetricsCollector {
 
     private final JavaPlugin plugin;
     private final TpsTracker tpsTracker;
+
+    public ServerMetricsCollector(JavaPlugin plugin, TpsTracker tpsTracker) {
+        this.plugin = plugin;
+        this.tpsTracker = tpsTracker;
+    }
 
     public static class Snapshot {
         private final MemoryMetrics memory;
@@ -48,70 +50,33 @@ public class ServerMetricsCollector {
             this.isOnline = isOnline;
         }
 
-        public MemoryMetrics getMemory() {
-            return memory;
-        }
-
-        public CpuMetrics getCpu() {
-            return cpu;
-        }
-
-        public DiskMetrics getDisk() {
-            return disk;
-        }
-
-        public NetworkAndPlayerMetrics getNetwork() {
-            return network;
-        }
-
-        public WorldMetrics getWorlds() {
-            return worlds;
-        }
-
-        public double[] getTps() {
-            return tps;
-        }
-
-        public double getMspt() {
-            return mspt;
-        }
-
-        public String getUptime() {
-            return uptime;
-        }
-
-        public String getServerVersion() {
-            return serverVersion;
-        }
-
-        public String getBukkitVersion() {
-            return bukkitVersion;
-        }
-
-        public boolean isOnline() {
-            return isOnline;
-        }
-    }
-
-    public ServerMetricsCollector(JavaPlugin plugin, TpsTracker tpsTracker) {
-        this.plugin = plugin;
-        this.tpsTracker = tpsTracker;
+        public MemoryMetrics getMemory() { return memory; }
+        public CpuMetrics getCpu() { return cpu; }
+        public DiskMetrics getDisk() { return disk; }
+        public NetworkAndPlayerMetrics getNetwork() { return network; }
+        public WorldMetrics getWorlds() { return worlds; }
+        public double[] getTps() { return tps; }
+        public double getMspt() { return mspt; }
+        public String getUptime() { return uptime; }
+        public String getServerVersion() { return serverVersion; }
+        public String getBukkitVersion() { return bukkitVersion; }
+        public boolean isOnline() { return isOnline; }
     }
 
     public Snapshot collectSnapshot(boolean isOnline) {
-        MemoryMetrics memory = MemoryMetrics.collect();
-        CpuMetrics cpu = CpuMetrics.collect();
-        DiskMetrics disk = DiskMetrics.collect(plugin.getServer().getWorldContainer());
-        NetworkAndPlayerMetrics network = NetworkAndPlayerMetrics.collect();
-        WorldMetrics worlds = WorldMetrics.collect();
-
-        double[] tps = tpsTracker.getTps();
-        double mspt = tpsTracker.getMspt();
-        String uptime = tpsTracker.getFormattedUptime();
-
-        String serverVersion = Bukkit.getName() + " " + Bukkit.getVersion();
-        String bukkitVersion = Bukkit.getBukkitVersion();
-
-        return new Snapshot(memory, cpu, disk, network, worlds, tps, mspt, uptime, serverVersion, bukkitVersion, isOnline);
+        File worldContainer = plugin.getServer().getWorldContainer();
+        return new Snapshot(
+                MemoryMetrics.collect(),
+                CpuMetrics.collect(),
+                DiskMetrics.collect(worldContainer),
+                NetworkAndPlayerMetrics.collect(),
+                WorldMetrics.collect(),
+                tpsTracker.getTps(),
+                tpsTracker.getMspt(),
+                tpsTracker.getFormattedUptime(),
+                Bukkit.getName() + " " + Bukkit.getVersion(),
+                Bukkit.getBukkitVersion(),
+                isOnline
+        );
     }
 }

@@ -11,9 +11,6 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Fluent builder for Discord Rich Embeds according to Discord REST API v10 specs.
- */
 public class EmbedBuilder {
 
     private String title;
@@ -55,9 +52,7 @@ public class EmbedBuilder {
 
         public JsonObjectBuilder toJsonObject() {
             JsonObjectBuilder builder = new JsonObjectBuilder().add("text", text);
-            if (iconUrl != null && !iconUrl.isEmpty()) {
-                builder.add("icon_url", iconUrl);
-            }
+            if (iconUrl != null && !iconUrl.isEmpty()) builder.add("icon_url", iconUrl);
             return builder;
         }
     }
@@ -75,50 +70,27 @@ public class EmbedBuilder {
 
         public JsonObjectBuilder toJsonObject() {
             JsonObjectBuilder builder = new JsonObjectBuilder().add("name", name);
-            if (url != null && !url.isEmpty()) {
-                builder.add("url", url);
-            }
-            if (iconUrl != null && !iconUrl.isEmpty()) {
-                builder.add("icon_url", iconUrl);
-            }
+            if (url != null && !url.isEmpty()) builder.add("url", url);
+            if (iconUrl != null && !iconUrl.isEmpty()) builder.add("icon_url", iconUrl);
             return builder;
         }
     }
 
-    public EmbedBuilder setTitle(String title) {
-        this.title = title;
-        return this;
-    }
-
-    public EmbedBuilder setDescription(String description) {
-        this.description = description;
-        return this;
-    }
-
-    public EmbedBuilder setUrl(String url) {
-        this.url = url;
-        return this;
-    }
-
-    public EmbedBuilder setColor(int color) {
-        this.color = color;
-        return this;
-    }
+    public EmbedBuilder setTitle(String title) { this.title = title; return this; }
+    public EmbedBuilder setDescription(String description) { this.description = description; return this; }
+    public EmbedBuilder setUrl(String url) { this.url = url; return this; }
+    public EmbedBuilder setColor(int color) { this.color = color; return this; }
 
     public EmbedBuilder setColorHex(String hexColor) {
         if (hexColor != null && !hexColor.isEmpty()) {
             String cleanHex = hexColor.replace("#", "").trim();
-            try {
-                this.color = Integer.parseInt(cleanHex, 16);
-            } catch (NumberFormatException ignored) {}
+            try { this.color = Integer.parseInt(cleanHex, 16); } catch (NumberFormatException ignored) {}
         }
         return this;
     }
 
     public EmbedBuilder setTimestamp(Instant instant) {
-        if (instant != null) {
-            this.timestamp = instant.toString();
-        }
+        if (instant != null) this.timestamp = instant.toString();
         return this;
     }
 
@@ -149,12 +121,9 @@ public class EmbedBuilder {
 
         if (!fields.isEmpty()) {
             List<JsonObjectBuilder> fieldObjects = new ArrayList<>();
-            for (Field f : fields) {
-                fieldObjects.add(f.toJsonObject());
-            }
+            for (Field f : fields) fieldObjects.add(f.toJsonObject());
             builder.add("fields", fieldObjects);
         }
-
         return builder;
     }
 }

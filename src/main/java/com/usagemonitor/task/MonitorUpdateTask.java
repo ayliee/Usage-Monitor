@@ -16,18 +16,8 @@ import org.bukkit.scheduler.BukkitTask;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Logger;
 
-/**
- * Periodic task that maintains a single live Discord message via webhook.
- *
- * Flow:
- *   - If no message-id is saved (first run or after /reset), POST to the
- *     webhook with ?wait=true, get the new message id, persist it.
- *   - On every subsequent cycle, PATCH the same message id with the latest
- *     payload. The webhook edits its own message — no permission juggling.
- *   - If a PATCH fails (404, 401, etc.) we KEEP the same id and just retry
- *     next cycle. We never auto-repost because that creates a new message
- *     every failure (the bug the user reported).
- */
+// Async timer fires; snapshot is collected on the main thread (Bukkit API is
+// main-thread only on Paper 1.21+); HTTP I/O then runs back on async.
 public class MonitorUpdateTask implements Runnable {
 
     private final JavaPlugin plugin;
@@ -52,10 +42,6 @@ public class MonitorUpdateTask implements Runnable {
         this.logger = plugin.getLogger();
     }
 
-    /**
-     * Returns the server's bind IP if set, otherwise the listen port, otherwise
-     * a placeholder. The user wanted the title's server name to come from the IP.
-     */
     private static String resolveServerName(JavaPlugin plugin) {
         try {
             String ip = plugin.getServer().getIp();
@@ -63,7 +49,6 @@ public class MonitorUpdateTask implements Runnable {
             if (ip != null && !ip.isEmpty() && !"0.0.0.0".equals(ip) && !"127.0.0.1".equals(ip)) {
                 return ip + ":" + port;
             }
-            // Bound to all interfaces (or localhost) — just show the port
             return "0.0.0.0:" + port;
         } catch (Throwable t) {
             return "Minecraft Server";
@@ -77,11 +62,10 @@ public class MonitorUpdateTask implements Runnable {
             return;
         }
         long intervalTicks = (long) config.getRefreshIntervalSeconds() * 20L;
-        // First tick is 1 second (20 ticks) so the user sees the dashboard quickly.
         this.scheduledTask = Bukkit.getScheduler().runTaskTimerAsynchronously(
                 plugin, this, 20L, intervalTicks);
-        logger.info("[Usage Monitor] Webhook dashboard active. Refreshing every " +
-                config.getRefreshIntervalSeconds() + "s.");
+        logger.info("[Usage Monitor] Webhook dashboard active. Refreshing every "
+                + config.getRefreshIntervalSeconds() + "s.");
     }
 
     public synchronized void stop() {
@@ -98,9 +82,7 @@ public class MonitorUpdateTask implements Runnable {
     @Override
     public void run() {
         if (!config.isConfigured()) return;
-        // Prevent overlap if a previous cycle is still in flight
         if (!isUpdating.compareAndSet(false, true)) return;
-        // Collect on main thread (Bukkit API is main-thread only on Paper 1.21+)
         Bukkit.getScheduler().runTask(plugin, this::collectOnMainThread);
     }
 
@@ -122,36 +104,25 @@ public class MonitorUpdateTask implements Runnable {
             String messageId = config.getMessageId();
 
             if (messageId == null || messageId.isEmpty()) {
-                // First ever post — create the message and persist its id
                 logger.info("[Usage Monitor] No dashboard message saved — posting initial webhook message.");
                 discordClient.postWebhookMessage(
-                        config.getWebhookId(),
-                        config.getWebhookToken(),
-                        payloadJson
+                        config.getWebhookId(), config.getWebhookToken(), payloadJson
                 ).thenAccept(newId -> {
                     if (newId != null && !newId.isEmpty()) {
                         config.setMessageId(newId);
-                        logger.info("[Usage Monitor] Dashboard message saved (id=" + newId + "). " +
-                                "All future refreshes will EDIT this same message.");
+                        logger.info("[Usage Monitor] Dashboard message saved (id=" + newId + ").");
                     } else {
-                        logger.warning("[Usage Monitor] Initial webhook post returned no id — " +
-                                "next cycle will retry. Check that the webhook URL is correct " +
-                                "and the channel still exists.");
+                        logger.warning("[Usage Monitor] Initial webhook post returned no id — next cycle will retry.");
                     }
                     isUpdating.set(false);
                 });
             } else {
-                // Edit the SAME message — never repost, even on failure
                 discordClient.editWebhookMessage(
-                        config.getWebhookId(),
-                        config.getWebhookToken(),
-                        messageId,
-                        payloadJson
+                        config.getWebhookId(), config.getWebhookToken(), messageId, payloadJson
                 ).thenAccept(success -> {
                     if (!success) {
-                        logger.warning("[Usage Monitor] Webhook edit failed for message " + messageId +
-                                " — will retry next cycle. If this keeps happening, the message may " +
-                                "have been deleted; run `/usagemonitor reset` to post a new one.");
+                        logger.warning("[Usage Monitor] Webhook edit failed for message " + messageId
+                                + " — will retry next cycle. If this keeps happening, run `/usagemonitor reset`.");
                     }
                     isUpdating.set(false);
                 });
@@ -170,12 +141,10 @@ public class MonitorUpdateTask implements Runnable {
             ServerMetricsCollector.Snapshot offlineSnapshot = metricsCollector.collectSnapshot(false);
             String payloadJson = payloadBuilder.buildLiveDashboardPayload(offlineSnapshot);
             discordClient.editWebhookMessage(
-                    config.getWebhookId(),
-                    config.getWebhookToken(),
-                    messageId,
-                    payloadJson
+                    config.getWebhookId(), config.getWebhookToken(), messageId, payloadJson
             ).join();
             logger.info("[Usage Monitor] Shutdown status pushed to webhook.");
-        } catch (Throwable ignored) {}
+        } catch (Throwable ignored) {
+        }
     }
 }

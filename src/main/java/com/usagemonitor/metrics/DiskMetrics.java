@@ -7,9 +7,6 @@ package com.usagemonitor.metrics;
 
 import java.io.File;
 
-/**
- * Captures disk storage metrics for the volume containing the Minecraft server.
- */
 public class DiskMetrics {
 
     private final long totalSpaceBytes;
@@ -26,11 +23,7 @@ public class DiskMetrics {
 
     public static DiskMetrics collect(File serverDirectory) {
         File root = serverDirectory != null ? serverDirectory : new File(".");
-        long total = root.getTotalSpace();
-        long free = root.getFreeSpace();
-        long usable = root.getUsableSpace();
-
-        return new DiskMetrics(total, free, usable);
+        return new DiskMetrics(root.getTotalSpace(), root.getFreeSpace(), root.getUsableSpace());
     }
 
     public double getUsedPercentage() {
@@ -38,19 +31,8 @@ public class DiskMetrics {
         return ((double) usedSpaceBytes / (double) totalSpaceBytes) * 100.0;
     }
 
-    public long getTotalSpaceBytes() {
-        return totalSpaceBytes;
-    }
-
-    public long getFreeSpaceBytes() {
-        return freeSpaceBytes;
-    }
-
-    public long getUsableSpaceBytes() {
-        return usableSpaceBytes;
-    }
-
-    public long getUsedSpaceBytes() {
-        return usedSpaceBytes;
-    }
+    public long getTotalSpaceBytes() { return totalSpaceBytes; }
+    public long getFreeSpaceBytes() { return freeSpaceBytes; }
+    public long getUsableSpaceBytes() { return usableSpaceBytes; }
+    public long getUsedSpaceBytes() { return usedSpaceBytes; }
 }

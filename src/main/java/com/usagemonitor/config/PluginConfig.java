@@ -15,14 +15,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.logging.Level;
 
-/**
- * Loads, validates, and persists the Usage Monitor configuration.
- *
- * Authentication: a single Discord webhook URL.
- * All embed emojis are overridable via monitor.emojis.* — supports both
- * standard unicode (e.g. "🖥️") and Discord custom emoji format
- * (e.g. "<:catpsbox:1234567890>" for static, "<a:catpsbox:1234567890>" for animated).
- */
+// Auth is a single Discord webhook URL — parsed once on load into id + token.
 public class PluginConfig {
 
     private final JavaPlugin plugin;
@@ -42,7 +35,6 @@ public class PluginConfig {
     private boolean showActions;
     private boolean showWorldDetails;
 
-    /** emoji key → glyph (unicode or Discord custom-emoji string). */
     private final Map<String, String> emojis = new HashMap<>();
 
     public PluginConfig(JavaPlugin plugin) {
@@ -71,56 +63,23 @@ public class PluginConfig {
         loadEmojis();
     }
 
-    /**
-     * Loads emoji overrides. All defaults are empty strings — the embed ships
-     * with no emojis. Set any key under monitor.emojis.* in config.yml to add
-     * emojis back. Supports:
-     *   emojis:
-     *     resources: "📦"                          (unicode)
-     *     live-stats: "<:mystats:1234567890>"      (Discord custom emoji)
-     *     players:   "<a:animated:9876543210>"     (Discord animated custom emoji)
-     */
     private void loadEmojis() {
         emojis.clear();
-        // Defaults — all empty by default. The DiscordPayloadBuilder handles
-        // empty values by skipping the leading space, so plain text flows cleanly.
-        emojis.put("title",         "");
-        emojis.put("resources",     "");
-        emojis.put("configuration", "");
-        emojis.put("live-stats",    "");
-        emojis.put("players",       "");
-        emojis.put("worlds",        "");
-        emojis.put("status-online", "");
-        emojis.put("status-offline","");
-        emojis.put("cpu",           "");
-        emojis.put("memory",        "");
-        emojis.put("disk",          "");
-        emojis.put("ram",           "");
-        emojis.put("storage",       "");
-        emojis.put("jvm-heap",      "");
-        emojis.put("software",      "");
-        emojis.put("bukkit",        "");
-        emojis.put("tps",           "");
-        emojis.put("mspt",          "");
-        emojis.put("players-online","");
-        emojis.put("chunks",        "");
-        emojis.put("entities",      "");
-
+        String[] keys = {
+            "title", "resources", "configuration", "live-stats", "players", "worlds",
+            "status-online", "status-offline", "cpu", "memory", "disk", "ram", "storage",
+            "jvm-heap", "software", "bukkit", "tps", "mspt", "players-online", "chunks", "entities"
+        };
+        for (String k : keys) emojis.put(k, "");
         if (!config.isConfigurationSection("monitor.emojis")) return;
         ConfigurationSection sec = config.getConfigurationSection("monitor.emojis");
         if (sec == null) return;
         for (String key : sec.getKeys(false)) {
             String val = sec.getString(key);
-            if (val != null) {
-                emojis.put(key, val); // explicitly-set empty string still overrides
-            }
+            if (val != null) emojis.put(key, val);
         }
     }
 
-    /**
-     * Parses the webhook URL into id and token.
-     * Format: https://discord.com/api/webhooks/{id}/{token}
-     */
     private void parseWebhook() {
         this.webhookId = null;
         this.webhookToken = null;
@@ -165,7 +124,6 @@ public class PluginConfig {
         }
     }
 
-    // ---- Getters ----
     public String getWebhookUrl() { return webhookUrl; }
     public String getWebhookId() { return webhookId; }
     public String getWebhookToken() { return webhookToken; }
@@ -180,10 +138,6 @@ public class PluginConfig {
     public boolean isShowLiveStats() { return showLiveStats; }
     public boolean isShowActions() { return showActions; }
 
-    /**
-     * Returns the configured emoji for the given key.
-     * Returns "" if the key is not configured (caller decides whether to skip).
-     */
     public String emoji(String key) {
         return emojis.getOrDefault(key, "");
     }
