@@ -47,8 +47,7 @@ The plugin maintains exactly one message in the channel. On startup it posts the
 
 If you want to ask questions, share your dashboard, or follow updates, the project lives in the following Discord community:
 
-- Discord guild ID: `1414217749038891102`
-- Discord invite link placeholder: `https://discord.com/channels/1414217749038891102`
+- Discord Server : https://discord.gg/aerox
 
 Replace the invite link with a real `https://discord.gg/<invite-code>` URL once you have one set up for your server. The guild ID above is the canonical reference; an invite code is just a way to onboard new people into the guild.
 
