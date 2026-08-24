@@ -14,18 +14,13 @@ import java.util.List;
 public class WorldMetrics {
 
     public static class WorldDetail {
-        private final String name;
-        private final String environment;
-        private final int loadedChunks;
-        private final int entityCount;
-
-        public WorldDetail(String name, String environment, int loadedChunks, int entityCount) {
-            this.name = name;
-            this.environment = environment;
-            this.loadedChunks = loadedChunks;
-            this.entityCount = entityCount;
+        final String name;
+        final String environment;
+        final int loadedChunks;
+        final int entityCount;
+        public WorldDetail(String n, String env, int c, int e) {
+            this.name = n; this.environment = env; this.loadedChunks = c; this.entityCount = e;
         }
-
         public String getName() { return name; }
         public String getEnvironment() { return environment; }
         public int getLoadedChunks() { return loadedChunks; }
@@ -36,35 +31,29 @@ public class WorldMetrics {
     private final int totalEntities;
     private final List<WorldDetail> worlds;
 
-    public WorldMetrics(int totalLoadedChunks, int totalEntities, List<WorldDetail> worlds) {
-        this.totalLoadedChunks = totalLoadedChunks;
-        this.totalEntities = totalEntities;
+    public WorldMetrics(int totalChunks, int totalEnts, List<WorldDetail> worlds) {
+        this.totalLoadedChunks = totalChunks;
+        this.totalEntities = totalEnts;
         this.worlds = worlds;
     }
 
     public static WorldMetrics collect() {
         if (!Bukkit.isPrimaryThread()) {
             throw new IllegalStateException(
-                "WorldMetrics.collect() must run on the main server thread. Current: "
+                "WorldMetrics.collect() must run on the main thread. Current: "
                 + Thread.currentThread().getName());
         }
 
         int totalChunks = 0;
         int totalEnts = 0;
         List<WorldDetail> list = new ArrayList<>();
-
-        for (World world : Bukkit.getWorlds()) {
-            int chunks = world.getLoadedChunks().length;
-            int ents = world.getEntities().size();
+        for (World w : Bukkit.getWorlds()) {
+            int chunks = w.getLoadedChunks().length;
+            int ents = w.getEntities().size();
             totalChunks += chunks;
             totalEnts += ents;
-            list.add(new WorldDetail(
-                    world.getName(),
-                    world.getEnvironment().name().toLowerCase(),
-                    chunks, ents
-            ));
+            list.add(new WorldDetail(w.getName(), w.getEnvironment().name().toLowerCase(), chunks, ents));
         }
-
         return new WorldMetrics(totalChunks, totalEnts, list);
     }
 

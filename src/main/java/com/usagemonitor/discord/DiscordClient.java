@@ -14,99 +14,83 @@ import java.util.concurrent.CompletableFuture;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-// Thin async wrapper over Discord's webhook REST API. First cycle POSTs with
-// ?wait=true to capture the message id; every later cycle PATCHes the same id.
+// POST once to grab a message id, then PATCH it every refresh. Failures are
+// logged and the same id is retried next cycle - we never auto-repost.
 public class DiscordClient {
 
-    private static final String WEBHOOK_BASE = "https://discord.com/api/webhooks";
-    private static final String USER_AGENT = "UsageMonitor-MinecraftPlugin-Webhook (1.2.3)";
+    private static final String BASE = "https://discord.com/api/webhooks";
+    private static final String UA = "UsageMonitor/1.2.3 (Minecraft)";
 
-    private final HttpClient httpClient;
-    private final Logger logger;
+    private final HttpClient http;
+    private final Logger log;
 
-    public DiscordClient(Logger logger) {
-        this.logger = logger;
-        this.httpClient = HttpClient.newBuilder()
+    public DiscordClient(Logger log) {
+        this.log = log;
+        this.http = HttpClient.newBuilder()
                 .version(HttpClient.Version.HTTP_2)
                 .connectTimeout(Duration.ofSeconds(6))
                 .build();
     }
 
-    public CompletableFuture<String> postWebhookMessage(String webhookId, String webhookToken, String jsonPayload) {
-        if (webhookId == null || webhookToken == null) {
-            return CompletableFuture.completedFuture(null);
-        }
-        String url = WEBHOOK_BASE + "/" + webhookId + "/" + webhookToken + "?wait=true";
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(url))
+    public CompletableFuture<String> postWebhookMessage(String id, String token, String json) {
+        if (id == null || token == null) return CompletableFuture.completedFuture(null);
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(BASE + "/" + id + "/" + token + "?wait=true"))
                 .header("Content-Type", "application/json")
-                .header("User-Agent", USER_AGENT)
+                .header("User-Agent", UA)
                 .timeout(Duration.ofSeconds(8))
-                .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
+                .POST(HttpRequest.BodyPublishers.ofString(json))
                 .build();
-
-        return httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString())
-                .thenApply(response -> {
-                    if (response.statusCode() >= 200 && response.statusCode() < 300) {
-                        String id = JsonObjectBuilder.extractStringField(response.body(), "id");
-                        logger.info("[Usage Monitor] Webhook message created (id=" + id + ")");
-                        return id;
-                    } else {
-                        logger.warning("[Usage Monitor] Webhook POST failed: HTTP " + response.statusCode()
-                                + " - " + truncate(response.body(), 200));
-                        return null;
-                    }
-                })
-                .exceptionally(ex -> {
-                    logger.log(Level.WARNING, "[Usage Monitor] Webhook POST error: " + ex.getMessage(), ex);
-                    return null;
-                });
+        return http.sendAsync(req, HttpResponse.BodyHandlers.ofString()).thenApply(resp -> {
+            if (resp.statusCode() / 100 == 2) {
+                String mid = JsonObjectBuilder.extractStringField(resp.body(), "id");
+                log.info("Webhook message posted (id=" + mid + ")");
+                return mid;
+            }
+            log.warning("Webhook POST " + resp.statusCode() + ": " + trim(resp.body()));
+            return null;
+        }).exceptionally(t -> {
+            log.log(Level.WARNING, "Webhook POST error", t);
+            return null;
+        });
     }
 
-    public CompletableFuture<Boolean> editWebhookMessage(String webhookId, String webhookToken,
-                                                        String messageId, String jsonPayload) {
-        if (webhookId == null || webhookToken == null || messageId == null || messageId.isEmpty()) {
+    public CompletableFuture<Boolean> editWebhookMessage(String id, String token, String msgId, String json) {
+        if (id == null || token == null || msgId == null || msgId.isEmpty()) {
             return CompletableFuture.completedFuture(false);
         }
-        String url = WEBHOOK_BASE + "/" + webhookId + "/" + webhookToken + "/messages/" + messageId;
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(url))
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(BASE + "/" + id + "/" + token + "/messages/" + msgId))
                 .header("Content-Type", "application/json")
-                .header("User-Agent", USER_AGENT)
+                .header("User-Agent", UA)
                 .timeout(Duration.ofSeconds(8))
-                .method("PATCH", HttpRequest.BodyPublishers.ofString(jsonPayload))
+                .method("PATCH", HttpRequest.BodyPublishers.ofString(json))
                 .build();
-
-        return httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString())
-                .thenApply(response -> {
-                    if (response.statusCode() >= 200 && response.statusCode() < 300) {
-                        return true;
-                    } else if (response.statusCode() == 404) {
-                        logger.warning("[Usage Monitor] Webhook message " + messageId
-                                + " not found (deleted?). Run `/usagemonitor reset` to post a new one.");
-                        return false;
-                    } else if (response.statusCode() == 401 || response.statusCode() == 403) {
-                        logger.warning("[Usage Monitor] Webhook invalid or revoked (HTTP " + response.statusCode()
-                                + "). Update discord.webhook-url in config.yml and reload.");
-                        return false;
-                    } else if (response.statusCode() == 429) {
-                        logger.warning("[Usage Monitor] Webhook edit rate-limited (HTTP 429). "
-                                + "Increase monitor.refresh-interval-seconds in config.yml.");
-                        return true;
-                    } else {
-                        logger.warning("[Usage Monitor] Webhook edit failed: HTTP " + response.statusCode()
-                                + " - " + truncate(response.body(), 200));
-                        return false;
-                    }
-                })
-                .exceptionally(ex -> {
-                    logger.warning("[Usage Monitor] Webhook edit error: " + ex.getMessage());
-                    return false;
-                });
+        return http.sendAsync(req, HttpResponse.BodyHandlers.ofString()).thenApply(resp -> {
+            int s = resp.statusCode();
+            if (s / 100 == 2) return true;
+            if (s == 404) {
+                log.warning("Webhook message " + msgId + " not found. Run `/usagemonitor reset`.");
+                return false;
+            }
+            if (s == 401 || s == 403) {
+                log.warning("Webhook rejected (" + s + "). Update discord.webhook-url and reload.");
+                return false;
+            }
+            if (s == 429) {
+                log.warning("Rate limited. Bump monitor.refresh-interval-seconds in config.yml.");
+                return true;
+            }
+            log.warning("Webhook edit " + s + ": " + trim(resp.body()));
+            return false;
+        }).exceptionally(t -> {
+            log.warning("Webhook edit error: " + t.getMessage());
+            return false;
+        });
     }
 
-    private static String truncate(String s, int max) {
+    private static String trim(String s) {
         if (s == null) return "";
-        return s.length() > max ? s.substring(0, max) + "..." : s;
+        return s.length() > 200 ? s.substring(0, 200) + "..." : s;
     }
 }

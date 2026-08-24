@@ -16,33 +16,31 @@ import org.bukkit.scheduler.BukkitTask;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Logger;
 
-// Async timer fires; snapshot is collected on the main thread (Bukkit API is
-// main-thread only on Paper 1.21+); HTTP I/O then runs back on async.
+// Async timer fires; snapshot is collected on the main thread (Paper 1.21+
+// refuses world/player reads off-thread); HTTP I/O then runs back on async.
 public class MonitorUpdateTask implements Runnable {
 
     private final JavaPlugin plugin;
-    private final PluginConfig config;
-    private final DiscordClient discordClient;
-    private final ServerMetricsCollector metricsCollector;
-    private final DiscordPayloadBuilder payloadBuilder;
-    private final Logger logger;
+    private final PluginConfig cfg;
+    private final DiscordClient discord;
+    private final ServerMetricsCollector collector;
+    private final DiscordPayloadBuilder builder;
+    private final Logger log;
 
-    private BukkitTask scheduledTask;
-    private final AtomicBoolean isUpdating = new AtomicBoolean(false);
+    private BukkitTask scheduled;
+    private final AtomicBoolean busy = new AtomicBoolean(false);
 
-    public MonitorUpdateTask(JavaPlugin plugin,
-                             PluginConfig config,
-                             DiscordClient discordClient,
-                             ServerMetricsCollector metricsCollector) {
+    public MonitorUpdateTask(JavaPlugin plugin, PluginConfig cfg,
+                             DiscordClient discord, ServerMetricsCollector collector) {
         this.plugin = plugin;
-        this.config = config;
-        this.discordClient = discordClient;
-        this.metricsCollector = metricsCollector;
-        this.payloadBuilder = new DiscordPayloadBuilder(config, resolveServerName(plugin));
-        this.logger = plugin.getLogger();
+        this.cfg = cfg;
+        this.discord = discord;
+        this.collector = collector;
+        this.builder = new DiscordPayloadBuilder(cfg, serverName(plugin));
+        this.log = plugin.getLogger();
     }
 
-    private static String resolveServerName(JavaPlugin plugin) {
+    private static String serverName(JavaPlugin plugin) {
         try {
             String ip = plugin.getServer().getIp();
             int port = plugin.getServer().getPort();
@@ -57,22 +55,17 @@ public class MonitorUpdateTask implements Runnable {
 
     public synchronized void start() {
         stop();
-        if (!config.isConfigured()) {
-            logger.warning("[Usage Monitor] Webhook not configured. Set discord.webhook-url in plugins/UsageMonitor/config.yml.");
+        if (!cfg.isConfigured()) {
+            log.warning("Webhook not configured. Set discord.webhook-url in config.yml.");
             return;
         }
-        long intervalTicks = (long) config.getRefreshIntervalSeconds() * 20L;
-        this.scheduledTask = Bukkit.getScheduler().runTaskTimerAsynchronously(
-                plugin, this, 20L, intervalTicks);
-        logger.info("[Usage Monitor] Webhook dashboard active. Refreshing every "
-                + config.getRefreshIntervalSeconds() + "s.");
+        long interval = (long) cfg.getRefreshIntervalSeconds() * 20L;
+        scheduled = Bukkit.getScheduler().runTaskTimerAsynchronously(plugin, this, 20L, interval);
+        log.info("Webhook dashboard active. Refresh every " + cfg.getRefreshIntervalSeconds() + "s.");
     }
 
     public synchronized void stop() {
-        if (scheduledTask != null) {
-            scheduledTask.cancel();
-            scheduledTask = null;
-        }
+        if (scheduled != null) { scheduled.cancel(); scheduled = null; }
     }
 
     public void forceUpdate() {
@@ -81,69 +74,64 @@ public class MonitorUpdateTask implements Runnable {
 
     @Override
     public void run() {
-        if (!config.isConfigured()) return;
-        if (!isUpdating.compareAndSet(false, true)) return;
+        if (!cfg.isConfigured()) return;
+        if (!busy.compareAndSet(false, true)) return;
         Bukkit.getScheduler().runTask(plugin, this::collectOnMainThread);
     }
 
     private void collectOnMainThread() {
-        ServerMetricsCollector.Snapshot snapshot;
+        ServerMetricsCollector.Snapshot snap;
         try {
-            snapshot = metricsCollector.collectSnapshot(true);
+            snap = collector.collectSnapshot(true);
         } catch (Throwable t) {
-            logger.warning("[Usage Monitor] Snapshot collection failed: " + t.getMessage());
-            isUpdating.set(false);
+            log.warning("Snapshot collection failed: " + t.getMessage());
+            busy.set(false);
             return;
         }
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> dispatch(snapshot));
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> dispatch(snap));
     }
 
-    private void dispatch(ServerMetricsCollector.Snapshot snapshot) {
+    private void dispatch(ServerMetricsCollector.Snapshot snap) {
         try {
-            String payloadJson = payloadBuilder.buildLiveDashboardPayload(snapshot);
-            String messageId = config.getMessageId();
+            String json = builder.buildLiveDashboardPayload(snap);
+            String mid = cfg.getMessageId();
 
-            if (messageId == null || messageId.isEmpty()) {
-                logger.info("[Usage Monitor] No dashboard message saved — posting initial webhook message.");
-                discordClient.postWebhookMessage(
-                        config.getWebhookId(), config.getWebhookToken(), payloadJson
-                ).thenAccept(newId -> {
-                    if (newId != null && !newId.isEmpty()) {
-                        config.setMessageId(newId);
-                        logger.info("[Usage Monitor] Dashboard message saved (id=" + newId + ").");
-                    } else {
-                        logger.warning("[Usage Monitor] Initial webhook post returned no id — next cycle will retry.");
-                    }
-                    isUpdating.set(false);
-                });
+            if (mid == null || mid.isEmpty()) {
+                log.info("No saved message id - posting initial webhook message.");
+                discord.postWebhookMessage(cfg.getWebhookId(), cfg.getWebhookToken(), json)
+                        .thenAccept(newId -> {
+                            if (newId != null && !newId.isEmpty()) {
+                                cfg.setMessageId(newId);
+                                log.info("Dashboard message saved (id=" + newId + ").");
+                            } else {
+                                log.warning("Initial POST returned no id - next cycle will retry.");
+                            }
+                            busy.set(false);
+                        });
             } else {
-                discordClient.editWebhookMessage(
-                        config.getWebhookId(), config.getWebhookToken(), messageId, payloadJson
-                ).thenAccept(success -> {
-                    if (!success) {
-                        logger.warning("[Usage Monitor] Webhook edit failed for message " + messageId
-                                + " — will retry next cycle. If this keeps happening, run `/usagemonitor reset`.");
-                    }
-                    isUpdating.set(false);
-                });
+                discord.editWebhookMessage(cfg.getWebhookId(), cfg.getWebhookToken(), mid, json)
+                        .thenAccept(ok -> {
+                            if (!ok) {
+                                log.warning("Edit failed for " + mid + " - will retry. Run `/usagemonitor reset` if it keeps failing.");
+                            }
+                            busy.set(false);
+                        });
             }
         } catch (Throwable t) {
-            logger.warning("[Usage Monitor] Update cycle error: " + t.getMessage());
-            isUpdating.set(false);
+            log.warning("Update cycle error: " + t.getMessage());
+            busy.set(false);
         }
     }
 
     public void sendShutdownStatus() {
-        if (!config.isConfigured()) return;
-        String messageId = config.getMessageId();
-        if (messageId == null || messageId.isEmpty()) return;
+        if (!cfg.isConfigured()) return;
+        String mid = cfg.getMessageId();
+        if (mid == null || mid.isEmpty()) return;
         try {
-            ServerMetricsCollector.Snapshot offlineSnapshot = metricsCollector.collectSnapshot(false);
-            String payloadJson = payloadBuilder.buildLiveDashboardPayload(offlineSnapshot);
-            discordClient.editWebhookMessage(
-                    config.getWebhookId(), config.getWebhookToken(), messageId, payloadJson
-            ).join();
-            logger.info("[Usage Monitor] Shutdown status pushed to webhook.");
+            ServerMetricsCollector.Snapshot snap = collector.collectSnapshot(false);
+            String json = builder.buildLiveDashboardPayload(snap);
+            discord.editWebhookMessage(cfg.getWebhookId(), cfg.getWebhookToken(), mid, json).join();
+            log.info("Shutdown status pushed.");
         } catch (Throwable ignored) {
         }
     }

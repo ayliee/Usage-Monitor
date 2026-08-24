@@ -22,43 +22,40 @@ public class MemoryMetrics {
     private final long systemFreeBytes;
     private final long systemUsedBytes;
 
-    public MemoryMetrics(long heapUsedBytes, long heapAllocatedBytes, long heapMaxBytes,
-                         long nonHeapUsedBytes, long systemTotalBytes, long systemFreeBytes) {
-        this.heapUsedBytes = heapUsedBytes;
-        this.heapAllocatedBytes = heapAllocatedBytes;
-        this.heapMaxBytes = heapMaxBytes > 0 ? heapMaxBytes : heapAllocatedBytes;
-        this.heapFreeBytes = Math.max(0, this.heapMaxBytes - heapUsedBytes);
-        this.nonHeapUsedBytes = nonHeapUsedBytes;
-        this.systemTotalBytes = systemTotalBytes;
-        this.systemFreeBytes = systemFreeBytes;
-        this.systemUsedBytes = Math.max(0, systemTotalBytes - systemFreeBytes);
+    public MemoryMetrics(long heapUsed, long heapAllocated, long heapMax,
+                         long nonHeapUsed, long sysTotal, long sysFree) {
+        this.heapUsedBytes = heapUsed;
+        this.heapAllocatedBytes = heapAllocated;
+        this.heapMaxBytes = heapMax > 0 ? heapMax : heapAllocated;
+        this.heapFreeBytes = Math.max(0, this.heapMaxBytes - heapUsed);
+        this.nonHeapUsedBytes = nonHeapUsed;
+        this.systemTotalBytes = sysTotal;
+        this.systemFreeBytes = sysFree;
+        this.systemUsedBytes = Math.max(0, sysTotal - sysFree);
     }
 
     public static MemoryMetrics collect() {
-        MemoryMXBean memBean = ManagementFactory.getMemoryMXBean();
-        MemoryUsage heap = memBean.getHeapMemoryUsage();
-        MemoryUsage nonHeap = memBean.getNonHeapMemoryUsage();
+        MemoryMXBean mem = ManagementFactory.getMemoryMXBean();
+        MemoryUsage heap = mem.getHeapMemoryUsage();
+        MemoryUsage nonHeap = mem.getNonHeapMemoryUsage();
 
         long sysTotal = -1;
         long sysFree = -1;
         try {
-            OperatingSystemMXBean osBean = ManagementFactory.getOperatingSystemMXBean();
-            Class<?> sunOsClass = Class.forName("com.sun.management.OperatingSystemMXBean");
-            if (sunOsClass.isInstance(osBean)) {
-                Method getTotalMem = sunOsClass.getMethod("getTotalPhysicalMemorySize");
-                Method getFreeMem = sunOsClass.getMethod("getFreePhysicalMemorySize");
-                Object totalObj = getTotalMem.invoke(osBean);
-                Object freeObj = getFreeMem.invoke(osBean);
-                if (totalObj instanceof Long) sysTotal = (Long) totalObj;
-                if (freeObj instanceof Long) sysFree = (Long) freeObj;
+            OperatingSystemMXBean os = ManagementFactory.getOperatingSystemMXBean();
+            Class<?> sunOs = Class.forName("com.sun.management.OperatingSystemMXBean");
+            if (sunOs.isInstance(os)) {
+                Object t = sunOs.getMethod("getTotalPhysicalMemorySize").invoke(os);
+                Object f = sunOs.getMethod("getFreePhysicalMemorySize").invoke(os);
+                if (t instanceof Long) sysTotal = (Long) t;
+                if (f instanceof Long) sysFree = (Long) f;
             }
         } catch (Throwable ignored) {
         }
 
         return new MemoryMetrics(
                 heap.getUsed(), heap.getCommitted(), heap.getMax(),
-                nonHeap.getUsed(), sysTotal, sysFree
-        );
+                nonHeap.getUsed(), sysTotal, sysFree);
     }
 
     public double getHeapUsagePercentage() {
@@ -83,8 +80,8 @@ public class MemoryMetrics {
         int filled = (int) Math.round((percentage / 100.0) * barLength);
         filled = Math.max(0, Math.min(barLength, filled));
         StringBuilder sb = new StringBuilder("`[");
-        for (int i = 0; i < filled; i++) sb.append("█");
-        for (int i = 0; i < barLength - filled; i++) sb.append("░");
+        for (int i = 0; i < filled; i++) sb.append('\u2588');
+        for (int i = 0; i < barLength - filled; i++) sb.append('\u2591');
         sb.append(String.format("] %5.1f%%`", percentage));
         return sb.toString();
     }

@@ -32,37 +32,29 @@ public class CpuMetrics {
     public static CpuMetrics collect() {
         double procCpu = -1.0;
         double sysCpu = -1.0;
-        int processors = Runtime.getRuntime().availableProcessors();
+        int procs = Runtime.getRuntime().availableProcessors();
 
         try {
-            OperatingSystemMXBean osBean = ManagementFactory.getOperatingSystemMXBean();
-            Class<?> sunOsClass = Class.forName("com.sun.management.OperatingSystemMXBean");
-            if (sunOsClass.isInstance(osBean)) {
-                Method getProcessCpu = sunOsClass.getMethod("getProcessCpuLoad");
-                Method getSystemCpu = sunOsClass.getMethod("getSystemCpuLoad");
-
-                Object procVal = getProcessCpu.invoke(osBean);
-                Object sysVal = getSystemCpu.invoke(osBean);
-
-                if (procVal instanceof Double) {
-                    double v = (Double) procVal;
+            OperatingSystemMXBean os = ManagementFactory.getOperatingSystemMXBean();
+            Class<?> sunOs = Class.forName("com.sun.management.OperatingSystemMXBean");
+            if (sunOs.isInstance(os)) {
+                Object p = sunOs.getMethod("getProcessCpuLoad").invoke(os);
+                Object s = sunOs.getMethod("getSystemCpuLoad").invoke(os);
+                if (p instanceof Double) {
+                    double v = (Double) p;
                     if (v >= 0.0) procCpu = v * 100.0;
                 }
-                if (sysVal instanceof Double) {
-                    double v = (Double) sysVal;
+                if (s instanceof Double) {
+                    double v = (Double) s;
                     if (v >= 0.0) sysCpu = v * 100.0;
                 }
             }
         } catch (Throwable ignored) {
         }
 
-        ThreadMXBean threadBean = ManagementFactory.getThreadMXBean();
-        return new CpuMetrics(
-                procCpu, sysCpu, processors,
-                threadBean.getThreadCount(),
-                threadBean.getPeakThreadCount(),
-                threadBean.getDaemonThreadCount()
-        );
+        ThreadMXBean t = ManagementFactory.getThreadMXBean();
+        return new CpuMetrics(procCpu, sysCpu, procs,
+                t.getThreadCount(), t.getPeakThreadCount(), t.getDaemonThreadCount());
     }
 
     public double getProcessCpuLoad() { return processCpuLoad; }

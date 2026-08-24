@@ -13,11 +13,11 @@ import java.io.File;
 public class ServerMetricsCollector {
 
     private final JavaPlugin plugin;
-    private final TpsTracker tpsTracker;
+    private final TpsTracker tps;
 
-    public ServerMetricsCollector(JavaPlugin plugin, TpsTracker tpsTracker) {
+    public ServerMetricsCollector(JavaPlugin plugin, TpsTracker tps) {
         this.plugin = plugin;
-        this.tpsTracker = tpsTracker;
+        this.tps = tps;
     }
 
     public static class Snapshot {
@@ -71,9 +71,9 @@ public class ServerMetricsCollector {
                 DiskMetrics.collect(worldContainer),
                 NetworkAndPlayerMetrics.collect(),
                 WorldMetrics.collect(),
-                tpsTracker.getTps(),
-                tpsTracker.getMspt(),
-                tpsTracker.getFormattedUptime(),
+                tps.getTps(),
+                tps.getMspt(),
+                tps.getFormattedUptime(),
                 Bukkit.getName() + " " + Bukkit.getVersion(),
                 Bukkit.getBukkitVersion(),
                 isOnline

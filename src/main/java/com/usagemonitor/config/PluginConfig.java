@@ -15,27 +15,26 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.logging.Level;
 
-// Auth is a single Discord webhook URL — parsed once on load into id + token.
 public class PluginConfig {
 
     private final JavaPlugin plugin;
-    private FileConfiguration config;
+    private FileConfiguration raw;
 
     private String webhookUrl;
     private String webhookId;
     private String webhookToken;
     private String messageId;
 
-    private int refreshIntervalSeconds;
-    private String embedColor;
-    private int progressBarLength;
-    private boolean showResources;
-    private boolean showConfiguration;
-    private boolean showLiveStats;
-    private boolean showActions;
-    private boolean showWorldDetails;
+    private int refreshIntervalSeconds = 5;
+    private String embedColor = "#2B2D31";
+    private int progressBarLength = 12;
+    private boolean showResources = true;
+    private boolean showConfiguration = true;
+    private boolean showLiveStats = true;
+    private boolean showActions = true;
+    private boolean showWorldDetails = true;
 
-    private final Map<String, String> emojis = new HashMap<>();
+    private final Map<String, String> emojiMap = new HashMap<>();
 
     public PluginConfig(JavaPlugin plugin) {
         this.plugin = plugin;
@@ -44,45 +43,46 @@ public class PluginConfig {
     public void load() {
         plugin.saveDefaultConfig();
         plugin.reloadConfig();
-        this.config = plugin.getConfig();
+        this.raw = plugin.getConfig();
 
-        this.webhookUrl = config.getString("discord.webhook-url", "").trim();
-        this.messageId = config.getString("discord.message-id", "").trim();
+        webhookUrl = raw.getString("discord.webhook-url", "").trim();
+        messageId = raw.getString("discord.message-id", "").trim();
         parseWebhook();
 
-        this.refreshIntervalSeconds = Math.max(1, config.getInt("monitor.refresh-interval-seconds", 5));
-        this.embedColor = config.getString("monitor.embed-color", "#2B2D31").trim();
-        this.progressBarLength = Math.max(5, Math.min(20, config.getInt("monitor.progress-bar-length", 12)));
+        refreshIntervalSeconds = Math.max(1, raw.getInt("monitor.refresh-interval-seconds", 5));
+        embedColor = raw.getString("monitor.embed-color", "#2B2D31").trim();
+        progressBarLength = Math.max(5, Math.min(20, raw.getInt("monitor.progress-bar-length", 12)));
 
-        this.showResources = config.getBoolean("monitor.show-resources", true);
-        this.showConfiguration = config.getBoolean("monitor.show-configuration", true);
-        this.showLiveStats = config.getBoolean("monitor.show-live-stats", true);
-        this.showActions = config.getBoolean("monitor.show-actions", true);
-        this.showWorldDetails = config.getBoolean("monitor.show-world-details", true);
+        showResources     = raw.getBoolean("monitor.show-resources", true);
+        showConfiguration = raw.getBoolean("monitor.show-configuration", true);
+        showLiveStats     = raw.getBoolean("monitor.show-live-stats", true);
+        showActions       = raw.getBoolean("monitor.show-actions", true);
+        showWorldDetails  = raw.getBoolean("monitor.show-world-details", true);
 
         loadEmojis();
     }
 
     private void loadEmojis() {
-        emojis.clear();
-        String[] keys = {
-            "title", "resources", "configuration", "live-stats", "players", "worlds",
-            "status-online", "status-offline", "cpu", "memory", "disk", "ram", "storage",
-            "jvm-heap", "software", "bukkit", "tps", "mspt", "players-online", "chunks", "entities"
-        };
-        for (String k : keys) emojis.put(k, "");
-        if (!config.isConfigurationSection("monitor.emojis")) return;
-        ConfigurationSection sec = config.getConfigurationSection("monitor.emojis");
+        emojiMap.clear();
+        for (String k : new String[]{
+                "title", "resources", "configuration", "live-stats", "players", "worlds",
+                "status-online", "status-offline", "cpu", "memory", "disk", "ram", "storage",
+                "jvm-heap", "software", "bukkit", "tps", "mspt",
+                "players-online", "chunks", "entities"}) {
+            emojiMap.put(k, "");
+        }
+        if (!raw.isConfigurationSection("monitor.emojis")) return;
+        ConfigurationSection sec = raw.getConfigurationSection("monitor.emojis");
         if (sec == null) return;
         for (String key : sec.getKeys(false)) {
-            String val = sec.getString(key);
-            if (val != null) emojis.put(key, val);
+            String v = sec.getString(key);
+            if (v != null) emojiMap.put(key, v);
         }
     }
 
     private void parseWebhook() {
-        this.webhookId = null;
-        this.webhookToken = null;
+        webhookId = null;
+        webhookToken = null;
         if (webhookUrl == null || webhookUrl.isEmpty()) return;
 
         String clean = webhookUrl;
@@ -92,17 +92,17 @@ public class PluginConfig {
 
         int idx = clean.indexOf("/webhooks/");
         if (idx < 0) {
-            plugin.getLogger().warning("[Usage Monitor] Webhook URL is malformed (missing '/webhooks/'): " + webhookUrl);
+            plugin.getLogger().warning("Malformed webhook URL (missing /webhooks/): " + webhookUrl);
             return;
         }
         String rest = clean.substring(idx + "/webhooks/".length());
         int slash = rest.indexOf('/');
         if (slash < 0) {
-            plugin.getLogger().warning("[Usage Monitor] Webhook URL is malformed (missing token): " + webhookUrl);
+            plugin.getLogger().warning("Malformed webhook URL (missing token): " + webhookUrl);
             return;
         }
-        this.webhookId = rest.substring(0, slash);
-        this.webhookToken = rest.substring(slash + 1);
+        webhookId = rest.substring(0, slash);
+        webhookToken = rest.substring(slash + 1);
     }
 
     public boolean isConfigured() {
@@ -110,17 +110,17 @@ public class PluginConfig {
                 && webhookToken != null && !webhookToken.isEmpty();
     }
 
-    public synchronized void setMessageId(String newMessageId) {
-        this.messageId = newMessageId == null ? "" : newMessageId.trim();
-        config.set("discord.message-id", this.messageId);
+    public synchronized void setMessageId(String id) {
+        this.messageId = id == null ? "" : id.trim();
+        raw.set("discord.message-id", this.messageId);
         save();
     }
 
     private void save() {
         try {
-            config.save(new File(plugin.getDataFolder(), "config.yml"));
+            raw.save(new File(plugin.getDataFolder(), "config.yml"));
         } catch (IOException e) {
-            plugin.getLogger().log(Level.SEVERE, "Failed to save config.yml", e);
+            plugin.getLogger().log(Level.SEVERE, "config save failed", e);
         }
     }
 
@@ -128,7 +128,6 @@ public class PluginConfig {
     public String getWebhookId() { return webhookId; }
     public String getWebhookToken() { return webhookToken; }
     public String getMessageId() { return messageId; }
-
     public int getRefreshIntervalSeconds() { return refreshIntervalSeconds; }
     public String getEmbedColor() { return embedColor; }
     public int getProgressBarLengthSafe() { return progressBarLength; }
@@ -139,6 +138,6 @@ public class PluginConfig {
     public boolean isShowActions() { return showActions; }
 
     public String emoji(String key) {
-        return emojis.getOrDefault(key, "");
+        return emojiMap.getOrDefault(key, "");
     }
 }

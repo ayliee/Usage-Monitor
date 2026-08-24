@@ -14,15 +14,15 @@ public class DiskMetrics {
     private final long usableSpaceBytes;
     private final long usedSpaceBytes;
 
-    public DiskMetrics(long totalSpaceBytes, long freeSpaceBytes, long usableSpaceBytes) {
-        this.totalSpaceBytes = totalSpaceBytes;
-        this.freeSpaceBytes = freeSpaceBytes;
-        this.usableSpaceBytes = usableSpaceBytes;
-        this.usedSpaceBytes = Math.max(0, totalSpaceBytes - freeSpaceBytes);
+    public DiskMetrics(long total, long free, long usable) {
+        this.totalSpaceBytes = total;
+        this.freeSpaceBytes = free;
+        this.usableSpaceBytes = usable;
+        this.usedSpaceBytes = Math.max(0, total - free);
     }
 
-    public static DiskMetrics collect(File serverDirectory) {
-        File root = serverDirectory != null ? serverDirectory : new File(".");
+    public static DiskMetrics collect(File serverDir) {
+        File root = serverDir != null ? serverDir : new File(".");
         return new DiskMetrics(root.getTotalSpace(), root.getFreeSpace(), root.getUsableSpace());
     }
 

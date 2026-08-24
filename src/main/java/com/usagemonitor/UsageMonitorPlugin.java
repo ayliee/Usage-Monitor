@@ -25,61 +25,56 @@ import java.util.List;
 
 public class UsageMonitorPlugin extends JavaPlugin implements CommandExecutor, TabCompleter {
 
-    private PluginConfig pluginConfig;
-    private TpsTracker tpsTracker;
-    private ServerMetricsCollector metricsCollector;
-    private DiscordClient discordClient;
-    private MonitorUpdateTask updateTask;
+    private PluginConfig cfg;
+    private TpsTracker tps;
+    private ServerMetricsCollector collector;
+    private DiscordClient discord;
+    private MonitorUpdateTask task;
 
     @Override
     public void onEnable() {
-        if (updateTask != null) {
-            updateTask.stop();
-            updateTask = null;
+        if (task != null) {
+            task.stop();
+            task = null;
         }
+        cfg = new PluginConfig(this);
+        cfg.load();
 
-        this.pluginConfig = new PluginConfig(this);
-        this.pluginConfig.load();
+        tps = new TpsTracker(this);
+        tps.start();
+        collector = new ServerMetricsCollector(this, tps);
 
-        this.tpsTracker = new TpsTracker(this);
-        this.tpsTracker.start();
-        this.metricsCollector = new ServerMetricsCollector(this, tpsTracker);
-
-        this.discordClient = new DiscordClient(getLogger());
-        this.updateTask = new MonitorUpdateTask(this, pluginConfig, discordClient, metricsCollector);
-        this.updateTask.start();
+        discord = new DiscordClient(getLogger());
+        task = new MonitorUpdateTask(this, cfg, discord, collector);
+        task.start();
 
         if (getCommand("usagemonitor") != null) {
             getCommand("usagemonitor").setExecutor(this);
             getCommand("usagemonitor").setTabCompleter(this);
         }
 
-        if (pluginConfig.isConfigured()) {
-            getLogger().info("[Usage Monitor] Plugin enabled. Webhook configured, refreshing every "
-                    + pluginConfig.getRefreshIntervalSeconds() + "s.");
+        if (cfg.isConfigured()) {
+            getLogger().info("Usage Monitor enabled. Webhook live, refresh every " + cfg.getRefreshIntervalSeconds() + "s.");
         } else {
-            getLogger().warning("[Usage Monitor] Plugin enabled BUT webhook not configured.");
-            getLogger().warning("[Usage Monitor] Edit plugins/UsageMonitor/config.yml and set discord.webhook-url.");
+            getLogger().warning("Usage Monitor loaded but webhook is not configured. Set discord.webhook-url in config.yml.");
         }
     }
 
     @Override
     public void onDisable() {
-        if (updateTask != null) {
-            updateTask.sendShutdownStatus();
-            updateTask.stop();
-            updateTask = null;
+        if (task != null) {
+            task.sendShutdownStatus();
+            task.stop();
+            task = null;
         }
-        if (tpsTracker != null) {
-            tpsTracker.stop();
-            tpsTracker = null;
-        }
+        if (tps != null) { tps.stop(); tps = null; }
     }
 
+    // TODO: split status output into a separate helper class if it grows further
     @Override
-    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+    public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
         if (!sender.hasPermission("usagemonitor.admin")) {
-            sender.sendMessage(ChatColor.RED + "You do not have permission to use this command.");
+            sender.sendMessage(ChatColor.RED + "No permission.");
             return true;
         }
 
@@ -90,86 +85,76 @@ public class UsageMonitorPlugin extends JavaPlugin implements CommandExecutor, T
 
         switch (args[0].toLowerCase()) {
             case "reload":
-                pluginConfig.load();
-                if (updateTask != null) updateTask.stop();
-                updateTask = new MonitorUpdateTask(this, pluginConfig, discordClient, metricsCollector);
-                updateTask.start();
-                sender.sendMessage(ChatColor.GREEN + "[Usage Monitor] Config reloaded.");
+                cfg.load();
+                if (task != null) task.stop();
+                task = new MonitorUpdateTask(this, cfg, discord, collector);
+                task.start();
+                sender.sendMessage(ChatColor.GREEN + "Config reloaded.");
                 break;
-
-            case "status":
-                sendStatus(sender);
-                break;
-
+            case "status": sendStatus(sender); break;
             case "forceupdate":
-                if (!pluginConfig.isConfigured()) {
-                    sender.sendMessage(ChatColor.RED + "Webhook not configured. Set discord.webhook-url first.");
+                if (!cfg.isConfigured()) {
+                    sender.sendMessage(ChatColor.RED + "Webhook not configured.");
                 } else {
-                    updateTask.forceUpdate();
-                    sender.sendMessage(ChatColor.GREEN + "[Usage Monitor] Forced an immediate update.");
+                    task.forceUpdate();
+                    sender.sendMessage(ChatColor.GREEN + "Forced a refresh.");
                 }
                 break;
-
             case "reset":
-                pluginConfig.setMessageId("");
-                if (updateTask != null) updateTask.forceUpdate();
-                sender.sendMessage(ChatColor.GREEN + "[Usage Monitor] Saved message id cleared. "
-                        + "Next cycle will post a fresh webhook message in the channel.");
+                cfg.setMessageId("");
+                if (task != null) task.forceUpdate();
+                sender.sendMessage(ChatColor.GREEN + "Saved message id cleared - next cycle will post a fresh message.");
                 break;
-
-            default:
-                sendHelp(sender, label);
-                break;
+            default: sendHelp(sender, label);
         }
         return true;
     }
 
-    private void sendHelp(CommandSender sender, String label) {
-        sender.sendMessage(ChatColor.GOLD + "=== Usage Monitor Commands ===");
-        sender.sendMessage(ChatColor.YELLOW + "/" + label + " status" + ChatColor.GRAY + " — show local metrics");
-        sender.sendMessage(ChatColor.YELLOW + "/" + label + " reload" + ChatColor.GRAY + " — reload config.yml");
-        sender.sendMessage(ChatColor.YELLOW + "/" + label + " forceupdate" + ChatColor.GRAY + " — refresh Discord now");
-        sender.sendMessage(ChatColor.YELLOW + "/" + label + " reset" + ChatColor.GRAY + " — clear saved message id and post a new one");
-        sender.sendMessage(ChatColor.YELLOW + "/" + label + " help" + ChatColor.GRAY + " — this help");
+    private void sendHelp(CommandSender s, String label) {
+        s.sendMessage(ChatColor.GOLD + "Usage Monitor");
+        s.sendMessage(ChatColor.YELLOW + "/" + label + " status " + ChatColor.GRAY + "- show local metrics");
+        s.sendMessage(ChatColor.YELLOW + "/" + label + " reload " + ChatColor.GRAY + "- reload config");
+        s.sendMessage(ChatColor.YELLOW + "/" + label + " forceupdate " + ChatColor.GRAY + "- push to Discord now");
+        s.sendMessage(ChatColor.YELLOW + "/" + label + " reset " + ChatColor.GRAY + "- clear message id and repost");
+        s.sendMessage(ChatColor.YELLOW + "/" + label + " help");
     }
 
-    private void sendStatus(CommandSender sender) {
-        ServerMetricsCollector.Snapshot snap = metricsCollector.collectSnapshot(true);
-        double[] tps = snap.getTps();
+    private void sendStatus(CommandSender s) {
+        ServerMetricsCollector.Snapshot snap = collector.collectSnapshot(true);
+        double[] tpsArr = snap.getTps();
         MemoryMetrics mem = snap.getMemory();
 
-        sender.sendMessage(ChatColor.GOLD + "=== Server Resource Monitor ===");
-        sender.sendMessage(ChatColor.AQUA + "TPS: " + ChatColor.WHITE
-                + String.format("%.2f, %.2f, %.2f", tps[0], tps[1], tps[2])
-                + ChatColor.DARK_AQUA + " | MSPT: " + ChatColor.WHITE + String.format("%.2f ms", snap.getMspt()));
-        sender.sendMessage(ChatColor.AQUA + "JVM Heap: " + ChatColor.WHITE
+        s.sendMessage(ChatColor.GOLD + "Server Monitor");
+        s.sendMessage(ChatColor.AQUA + "TPS: " + ChatColor.WHITE
+                + String.format("%.2f, %.2f, %.2f", tpsArr[0], tpsArr[1], tpsArr[2])
+                + ChatColor.DARK_AQUA + "  MSPT: " + ChatColor.WHITE
+                + String.format("%.2f ms", snap.getMspt()));
+        s.sendMessage(ChatColor.AQUA + "Heap: " + ChatColor.WHITE
                 + MemoryMetrics.formatBytes(mem.getHeapUsedBytes()) + " / "
                 + MemoryMetrics.formatBytes(mem.getHeapMaxBytes())
                 + String.format(" (%.1f%%)", mem.getHeapUsagePercentage()));
-        sender.sendMessage(ChatColor.AQUA + "Disk: " + ChatColor.WHITE
+        s.sendMessage(ChatColor.AQUA + "Disk: " + ChatColor.WHITE
                 + MemoryMetrics.formatBytes(snap.getDisk().getUsedSpaceBytes()) + " / "
                 + MemoryMetrics.formatBytes(snap.getDisk().getTotalSpaceBytes())
                 + String.format(" (%.1f%%)", snap.getDisk().getUsedPercentage()));
-        sender.sendMessage(ChatColor.AQUA + "Uptime: " + ChatColor.WHITE + snap.getUptime());
-        sender.sendMessage(ChatColor.AQUA + "Webhook: "
-                + (pluginConfig.isConfigured()
-                    ? ChatColor.GREEN + "configured (refresh " + pluginConfig.getRefreshIntervalSeconds() + "s)"
-                    : ChatColor.RED + "not configured (edit config.yml)"));
-        sender.sendMessage(ChatColor.AQUA + "Saved message id: "
-                + (pluginConfig.getMessageId() == null || pluginConfig.getMessageId().isEmpty()
-                    ? ChatColor.YELLOW + "(none — will post on next cycle)"
-                    : ChatColor.GREEN + pluginConfig.getMessageId()));
+        s.sendMessage(ChatColor.AQUA + "Uptime: " + ChatColor.WHITE + snap.getUptime());
+        s.sendMessage(ChatColor.AQUA + "Webhook: "
+                + (cfg.isConfigured()
+                    ? ChatColor.GREEN + "ok (" + cfg.getRefreshIntervalSeconds() + "s refresh)"
+                    : ChatColor.RED + "not configured"));
+        s.sendMessage(ChatColor.AQUA + "Message id: "
+                + (cfg.getMessageId() == null || cfg.getMessageId().isEmpty()
+                    ? ChatColor.YELLOW + "(none, will post on next cycle)"
+                    : ChatColor.GREEN + cfg.getMessageId()));
     }
 
     @Override
-    public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
-        if (args.length == 1) {
-            List<String> completions = new ArrayList<>();
-            for (String opt : Arrays.asList("status", "reload", "forceupdate", "reset", "help")) {
-                if (opt.startsWith(args[0].toLowerCase())) completions.add(opt);
-            }
-            return completions;
+    public List<String> onTabComplete(CommandSender sender, Command cmd, String alias, String[] args) {
+        if (args.length != 1) return Collections.emptyList();
+        List<String> out = new ArrayList<>();
+        for (String opt : Arrays.asList("status", "reload", "forceupdate", "reset", "help")) {
+            if (opt.startsWith(args[0].toLowerCase())) out.add(opt);
         }
-        return Collections.emptyList();
+        return out;
     }
 }

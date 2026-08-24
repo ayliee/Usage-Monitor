@@ -17,14 +17,12 @@ import java.util.List;
 public class NetworkAndPlayerMetrics {
 
     public static class PlayerEntry {
-        private final String name;
-        private final int ping;
-
+        final String name;
+        final int ping;
         public PlayerEntry(String name, int ping) {
             this.name = name;
             this.ping = ping;
         }
-
         public String getName() { return name; }
         public int getPing() { return ping; }
     }
@@ -33,43 +31,42 @@ public class NetworkAndPlayerMetrics {
     private final int maxPlayers;
     private final List<PlayerEntry> playerList;
 
-    public NetworkAndPlayerMetrics(int onlinePlayerCount, int maxPlayers, List<PlayerEntry> playerList) {
-        this.onlinePlayerCount = onlinePlayerCount;
-        this.maxPlayers = maxPlayers;
-        this.playerList = playerList;
+    public NetworkAndPlayerMetrics(int online, int max, List<PlayerEntry> list) {
+        this.onlinePlayerCount = online;
+        this.maxPlayers = max;
+        this.playerList = list;
     }
 
     public static NetworkAndPlayerMetrics collect() {
         if (!Bukkit.isPrimaryThread()) {
             throw new IllegalStateException(
-                "NetworkAndPlayerMetrics.collect() must run on the main server thread. Current: "
+                "NetworkAndPlayerMetrics.collect() must run on the main thread. Current: "
                 + Thread.currentThread().getName());
         }
 
-        Collection<? extends Player> onlinePlayers = Bukkit.getOnlinePlayers();
+        Collection<? extends Player> online = Bukkit.getOnlinePlayers();
         int max = Bukkit.getMaxPlayers();
         List<PlayerEntry> list = new ArrayList<>();
-        for (Player p : onlinePlayers) {
+        for (Player p : online) {
             list.add(new PlayerEntry(p.getName(), extractPing(p)));
         }
-        return new NetworkAndPlayerMetrics(onlinePlayers.size(), max, list);
+        return new NetworkAndPlayerMetrics(online.size(), max, list);
     }
 
-    private static int extractPing(Player player) {
-        if (player == null) return 0;
+    private static int extractPing(Player p) {
+        if (p == null) return 0;
+        // Modern Bukkit API (1.17+, also backported to Paper 1.16).
         try {
-            Method getPing = player.getClass().getMethod("getPing");
-            Object val = getPing.invoke(player);
-            if (val instanceof Integer) return (Integer) val;
+            Method getPing = p.getClass().getMethod("getPing");
+            Object v = getPing.invoke(p);
+            if (v instanceof Integer) return (Integer) v;
         } catch (Throwable ignored) {
         }
+        // Fallback for older Spigot 1.16.5 - go through NMS CraftPlayer.handle().ping
         try {
-            Method getHandle = player.getClass().getMethod("getHandle");
-            Object entityPlayer = getHandle.invoke(player);
-            if (entityPlayer != null) {
-                Field pingField = entityPlayer.getClass().getField("ping");
-                return pingField.getInt(entityPlayer);
-            }
+            Method getHandle = p.getClass().getMethod("getHandle");
+            Object nms = getHandle.invoke(p);
+            if (nms != null) return nms.getClass().getField("ping").getInt(nms);
         } catch (Throwable ignored) {
         }
         return 0;
