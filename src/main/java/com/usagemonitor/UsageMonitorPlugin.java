@@ -70,7 +70,6 @@ public class UsageMonitorPlugin extends JavaPlugin implements CommandExecutor, T
         if (tps != null) { tps.stop(); tps = null; }
     }
 
-    // TODO: split status output into a separate helper class if it grows further
     @Override
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
         if (!sender.hasPermission("usagemonitor.admin")) {
